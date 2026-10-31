@@ -1,34 +1,44 @@
 <script setup>
-import TaskItem from './TaskItem.vue'
-
-defineProps({
-  tasks: {
-    type: Array,
-    default: () => [],
-  },
-})
-
-const emit = defineEmits(['edit', 'delete'])
-
-function forwardEdit(task) {
-  emit('edit', task)
-}
-
-function forwardDelete(taskId) {
-  emit('delete', taskId)
-}
+  import TaskItem from './TaskItem.vue'
+  
+  const props = defineProps({
+    tasks: {
+      type: Array,
+      default: () => [],
+    },
+    deletingTaskId: {
+      type: Number,
+      default: null,
+    },
+    isMutating: {
+        type: Boolean,
+        default: false,
+    },
+  })
+  
+  const emit = defineEmits(['edit', 'delete'])
+  
+  function forwardEdit(task) {
+    emit('edit', task)
+  }
+  
+  function forwardDelete(taskId) {
+    emit('delete', taskId)
+  }
 </script>
 
 <template>
   <div class="task-list">
-    <p v-if="tasks.length === 0" class="empty-state" role="status">
+    <p v-if="props.tasks.length === 0" class="empty-state" role="status">
       No tasks yet. Add your first task.
     </p>
 
     <ul v-else class="task-items">
-      <li v-for="task in tasks" :key="task.id">
+      <li v-for="task in props.tasks" :key="task.id">
         <TaskItem
           :task="task"
+          :deleting="props.deletingTaskId === task.id"
+          :disabled="props.isMutating"
           @edit="forwardEdit"
           @delete="forwardDelete"
         />

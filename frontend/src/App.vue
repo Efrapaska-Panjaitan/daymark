@@ -1,28 +1,174 @@
 <script setup>
-  // Root layout Daymark
+  import { onMounted, ref } from 'vue'
+  
   import TaskForm from './components/TaskForm.vue'
   import TaskList from './components/TaskList.vue'
-
-  const previewTasks = [
-    {
-      id: 1,
-      title: 'Review API contract',
-      description: 'Check request and response fields.',
-      status: 'Todo',
-    },
-    {
-      id: 2,
-      title: 'Build the task form',
-      description: 'Prepare the form for the next integration step.',
-      status: 'In Progress',
-    },
-    {
-      id: 3,
-      title: 'Set up the project',
-      description: 'Vue and Vite are ready.',
-      status: 'Done',
-    },
-  ]
+  import {
+    createTask,
+    deleteTask,
+    getTasks,
+    updateTask,
+  } from './services/taskService.js'
+  
+  const tasks = ref([])
+  const isLoading = ref(true)
+  const loadError = ref('')
+  const formError = ref('')
+  const deleteError = ref('')
+  const isMutating = ref(false)
+  const deletingTaskId = ref(null)
+  const formVersion = ref(0)
+  const editingTask = ref(null)
+  
+  async function loadTasks() {
+    isLoading.value = true
+    loadError.value = ''
+  
+    try {
+      const responseTasks = await getTasks()
+  
+      if (!Array.isArray(responseTasks)) {
+        throw new Error('Backend mengirim format daftar task yang tidak valid.')
+      }
+  
+      tasks.value = responseTasks
+    } catch (error) {
+      console.error('Gagal memuat daftar task:', error)
+      loadError.value =
+        error instanceof Error ? error.message : 'Gagal memuat daftar task.'
+    } finally {
+      isLoading.value = false
+    }
+  }
+  
+  function startEdit(task) {
+    if (isMutating.value) {
+      return
+    }
+  
+    editingTask.value = task
+    formError.value = ''
+  }
+  
+  function cancelEdit() {
+    if (isMutating.value) {
+      return
+    }
+  
+    editingTask.value = null
+    formError.value = ''
+  }
+  
+  async function handleCreateTask(taskData) {
+    if (isMutating.value) {
+      return
+    }
+  
+    isMutating.value = true
+    formError.value = ''
+  
+    try {
+      const createdTask = await createTask(taskData)
+      tasks.value = [...tasks.value, createdTask]
+      formVersion.value += 1
+    } catch (error) {
+      console.error('Gagal membuat task:', error)
+      formError.value =
+        error instanceof Error ? error.message : 'Gagal membuat task.'
+    } finally {
+      isMutating.value = false
+    }
+  }
+  
+  async function handleUpdateTask(taskData) {
+    if (isMutating.value) {
+      return
+    }
+  
+    const taskBeingEdited = editingTask.value
+  
+    if (!taskBeingEdited) {
+      return
+    }
+  
+    isMutating.value = true
+    formError.value = ''
+  
+    try {
+      const updatedTask = await updateTask(taskBeingEdited.id, taskData)
+  
+      tasks.value = tasks.value.map((task) =>
+        task.id === updatedTask.id ? updatedTask : task,
+      )
+  
+      editingTask.value = null
+    } catch (error) {
+      console.error('Gagal memperbarui task:', error)
+      formError.value =
+        error instanceof Error ? error.message : 'Gagal memperbarui task.'
+  
+      if (error?.status === 404) {
+        await loadTasks()
+      }
+    } finally {
+      isMutating.value = false
+    }
+  }
+  
+  async function handleFormSubmit(taskData) {
+    if (isMutating.value) {
+      return
+    }
+  
+    if (editingTask.value) {
+      await handleUpdateTask(taskData)
+      return
+    }
+  
+    await handleCreateTask(taskData)
+  }
+  
+  async function handleDeleteTask(taskId) {
+    if (isMutating.value) {
+      return
+    }
+  
+    const taskToDelete = tasks.value.find((task) => task.id === taskId)
+  
+    if (!taskToDelete) {
+      return
+    }
+  
+    const confirmed = window.confirm(
+      `Delete "${taskToDelete.title}"? This cannot be undone.`,
+    )
+  
+    if (!confirmed) {
+      return
+    }
+  
+    isMutating.value = true
+    deletingTaskId.value = taskId
+    deleteError.value = ''
+  
+    try {
+      await deleteTask(taskId)
+      tasks.value = tasks.value.filter((task) => task.id !== taskId)
+    } catch (error) {
+      console.error('Gagal menghapus task:', error)
+      deleteError.value =
+        error instanceof Error ? error.message : 'Gagal menghapus task.'
+  
+      if (error?.status === 404) {
+        await loadTasks()
+      }
+    } finally {
+      isMutating.value = false
+      deletingTaskId.value = null
+    }
+  }
+  
+  onMounted(loadTasks)
 </script>
 
 <template>
@@ -34,29 +180,74 @@
 
     <main class="main-content">
       <section class="page-intro" aria-labelledby="page-title">
-        <h1 id="page-title">Welcome!</h1>
-        <p class="intro-copy">
-          Create and Manage Your Tasks.
-        </p>
+        <h1 id="page-title">Tasks</h1>
+        <p class="intro-copy">Create and manage your tasks.</p>
       </section>
 
       <div class="workspace-grid">
         <section class="workspace-panel" aria-labelledby="form-heading">
           <div class="section-heading">
-            <p class="eyebrow">Create</p>
-            <h2 id="form-heading">Add a task</h2>
+            <p class="eyebrow">{{ editingTask ? 'Update' : 'Create' }}</p>
+            <h2 id="form-heading">
+              {{ editingTask ? 'Edit task' : 'Add a task' }}
+            </h2>
           </div>
 
-          <TaskForm />
+          <TaskForm
+            :key="formVersion"
+            :task="editingTask"
+            :submitting="isMutating"
+            @submit="handleFormSubmit"
+            @cancel="cancelEdit"
+          />
+
+          <p v-if="formError" class="form-request-error" role="alert">
+            {{ formError }}
+          </p>
         </section>
 
-        <section class="workspace-panel task-list-region" aria-labelledby="list-heading">
+        <section
+          class="workspace-panel task-list-region"
+          aria-labelledby="list-heading"
+        >
           <div class="section-heading">
             <p class="eyebrow">Your work</p>
             <h2 id="list-heading">Your tasks</h2>
           </div>
 
-          <TaskList :tasks="previewTasks" />
+          <p v-if="deleteError" class="request-error" role="alert">
+            {{ deleteError }}
+          </p>
+
+          <p v-if="isLoading" class="request-state" role="status">
+            Loading tasks…
+          </p>
+
+          <p
+            v-else-if="loadError && tasks.length === 0"
+            class="request-state request-state--error"
+            role="alert"
+          >
+            {{ loadError }}
+          </p>
+
+          <template v-else>
+            <p
+              v-if="loadError"
+              class="request-error"
+              role="alert"
+            >
+              {{ loadError }}
+            </p>
+
+            <TaskList
+              :tasks="tasks"
+              :deleting-task-id="deletingTaskId"
+              :is-mutating="isMutating"
+              @edit="startEdit"
+              @delete="handleDeleteTask"
+            />
+          </template>
         </section>
       </div>
     </main>
@@ -113,7 +304,7 @@
   .page-intro h1 {
     margin-bottom: var(--space-3);
     color: var(--color-text-primary);
-    font-size: clamp(1.75rem, 4vw, 2.5rem);
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
     line-height: var(--line-height-heading);
   }
   
@@ -145,6 +336,41 @@
     color: var(--color-text-primary);
     font-size: var(--font-size-large);
     line-height: var(--line-height-heading);
+  }
+  
+  .form-request-error,
+  .request-error {
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-medium);
+    color: var(--color-accent);
+    font-size: var(--font-size-small);
+    overflow-wrap: anywhere;
+  }
+  
+  .form-request-error {
+    margin-top: var(--space-4);
+  }
+  
+  .request-error {
+    margin-bottom: var(--space-4);
+  }
+  
+  .request-state {
+    display: grid;
+    min-height: 160px;
+    place-items: center;
+    padding: var(--space-6);
+    border: 1px dashed var(--color-border);
+    border-radius: var(--radius-medium);
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-small);
+    text-align: center;
+  }
+  
+  .request-state--error {
+    border-color: var(--color-accent);
+    color: var(--color-accent);
   }
   
   @media (max-width: 820px) {

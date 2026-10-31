@@ -1,34 +1,44 @@
 <script setup>
-import { computed } from 'vue'
-
-const props = defineProps({
-  task: {
-    type: Object,
-    required: true,
-  },
-})
-
-const emit = defineEmits(['edit', 'delete'])
-
-const statusClass = computed(() => {
-  if (props.task.status === 'In Progress') {
-    return 'status-badge--progress'
+  import { computed } from 'vue'
+  
+  const props = defineProps({
+    task: {
+      type: Object,
+      required: true,
+    },
+    deleting: {
+      type: Boolean,
+      default: false,
+    },
+    disabled: {
+      type: Boolean,
+      default: false,
+    },
+  })
+  
+  const emit = defineEmits(['edit', 'delete'])
+  
+  const statusClass = computed(() => {
+    if (props.task.status === 'In Progress') {
+      return 'status-badge--progress'
+    }
+  
+    if (props.task.status === 'Done') {
+      return 'status-badge--done'
+    }
+  
+    return 'status-badge--todo'
+  })
+  
+  function requestEdit() {
+    emit('edit', props.task)
   }
-
-  if (props.task.status === 'Done') {
-    return 'status-badge--done'
+  
+  function requestDelete() {
+    if (!props.disabled && !props.deleting) {
+      emit('delete', props.task.id)
+    }
   }
-
-  return 'status-badge--todo'
-})
-
-function requestEdit() {
-  emit('edit', props.task)
-}
-
-function requestDelete() {
-  emit('delete', props.task.id)
-}
 </script>
 
 <template>
@@ -54,6 +64,7 @@ function requestDelete() {
         class="action-button"
         type="button"
         :aria-label="'Edit task: ' + task.title"
+        :disabled="disabled || deleting"
         @click="requestEdit"
       >
         Edit
@@ -62,9 +73,10 @@ function requestDelete() {
         class="action-button action-button--delete"
         type="button"
         :aria-label="'Delete task: ' + task.title"
+        :disabled="disabled || deleting"
         @click="requestDelete"
       >
-        Delete
+        {{ deleting ? 'Deleting…' : 'Delete' }}
       </button>
     </div>
   </article>
@@ -160,13 +172,18 @@ function requestDelete() {
     cursor: pointer;
   }
   
-  .action-button:hover {
+  .action-button:not(:disabled):hover {
     background-color: var(--color-background);
     color: var(--color-text-primary);
   }
   
-  .action-button--delete:hover {
+  .action-button--delete:not(:disabled):hover {
     color: var(--color-accent);
+  }
+  
+  .action-button:disabled {
+    opacity: 0.65;
+    cursor: wait;
   }
   
   @media (max-width: 560px) {
