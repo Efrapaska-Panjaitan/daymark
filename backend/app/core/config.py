@@ -23,7 +23,7 @@ def _normalize_database_url(url: str) -> str:
 _raw_database_url = os.getenv("DATABASE_URL", "").strip()
 if not _raw_database_url:
     raise RuntimeError(
-        "DATABASE_URL belum diatur. Isi variabel tersebut di environment"
+        "DATABASE_URL belum diatur. Isi variabel tersebut di environment "
         "atau file .env pada root project."
     ) 
 
